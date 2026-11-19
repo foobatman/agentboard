@@ -1123,3 +1123,84 @@ Verified 2026-11-19 against live docs (fetched during spec authoring). **[V]** i
 | MCP SDK | v1.32.2 (`@modelcontextprotocol/sdk`) and v2 (`@modelcontextprotocol/server` 2.4.0, `main` branch, zod ^4.2) | v1 import paths |
 
 | Cross-session messaging & channels | `ListAgents`/`SendMessage` on by default ≥ v2.1.224 (macOS/Linux), per-session Unix socket, names via `--name`, `crossSessionInbound` accept/hold/refuse, limits (≈1M chars, queue 50/hold 100), `--bare` can't receive, messages are not user consent; channels: `claude/channel` capability, `<channel>` injection, `--dangerously-load-development-channels server:<name>` (interactive only, dialog), research preview, `channelsEnabled` for Team/Enterprise; agent teams experimental (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) | `SendMessage` tool_input field names; messaging-socket wire format; dev-flag dialog persistence; HTTP-transport channels; agent-teams per-teammate cwd/worktree & lead-only restriction; Remote Control page only partly read |
+
+---
+
+## 18. Revision 3 — review findings and M0 spike results (authoritative)
+
+**Where this section conflicts with anything above, this section wins.** It resolves an independent review (52 findings) and the spikes that could be run on 2026-11-19 against Claude Code **v2.1.328** (Linux container, isolated `CLAUDE_CONFIG_DIR`, no model calls).
+
+### 18.1 Spike results
+
+| Spike | Result | Consequence |
+|---|---|---|
+| M0-1 flags together (interactive) | ✅ `--session-id --name --permission-mode --settings --setting-sources project,local --mcp-config --strict-mcp-config --append-system-prompt-file --debug-file --dangerously-load-development-channels` all accepted | as specified |
+| Capability probe via `--help` | ❌ `--append-system-prompt-file` and `--dangerously-load-development-channels` are **hidden** from `--help` | probe checks only visible flags; hidden flags verified by a dry launch at onboarding |
+| M0-2 MCP `type:"http"` + `headers` with `${AGENTBOARD_TOKEN}` | ✅ bus received `Authorization: Bearer <token>`; client sends `server/discover` (MCP 2026-07-28) then falls back to `initialize` `2025-11-25` | MCP-over-HTTP primary confirmed; SDK v1.x works |
+| http hooks | ❌ for `SessionStart`: debug log "HTTP hooks are not supported for SessionStart". Others need a model turn to test (not run: would consume plan usage) | **all hooks are `command` hooks** running the shipped `ab-hook` script (curl to the bus) — uniform and independent of per-event http support |
+| statusLine | ✅ runs at start and every `refreshInterval`; JSON has `session_id, session_name, model, cost.*, context_window.*, effort, thinking, fast_mode, workspace, version`; `rate_limits`/`prompt_cache` null before first response / without Max-Pro | usage feature as specified |
+| M0-7 trust dialog | ⚠️ default selection is **"No, exit"** (Enter exits). Down-arrow + Enter accepts. ✅ trust **inherits** from a trusted parent: a never-trusted subfolder of a trusted folder started with no dialog | onboarding trusts `~/agentboard` once (`AB_HOME`); all worktrees/workspaces live under it. Repos' own folders are never used as cwd. Pattern-matcher keeps "Down, Enter" as fallback |
+| First-run screens | ⚠️ a fresh config shows onboarding (theme picker) before trust | preflight launches `claude` once in onboarding; spawned sessions that show onboarding/login → state `needs_user_dialog` + app-origin attention item |
+| M0-17 channel dev-flag dialog | ✅ appears each launch (fresh config); default "local development" option, Enter accepts | auto-answer Enter, matched on exact text `Loading development channels` + `Channels: server:agentboard`; channel registration over HTTP verified by the integration test against real `claude` once the bus exists ("Channel notifications skipped: server did not declare claude/channel capability" is the negative log line) |
+| Env inheritance | ❌ spawned `claude` inherited the parent Claude's `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET`… | **env allowlist**, never `process.env` (18.3) |
+| Proxy | ❌ with `HTTPS_PROXY` set, Claude's requests to `127.0.0.1` did not reach the bus | always set `NO_PROXY=127.0.0.1,localhost` (+ lowercase) |
+| BEL/OSC from idle claude | 0 BEL; OSC 8 only (hyperlinks) | filters as specified |
+Not run (need a model turn or macOS): M0-3, M0-5, M0-6 (partly: user skills dir moves with `CLAUDE_CONFIG_DIR`), M0-8, M0-9–M0-16, M0-18. They stay open with their fallbacks.
+
+### 18.2 Communication model clarified (C1, M1–M3, M5, M10, M24, S1)
+* **PTY control writes** to a worker are allowed only from a closed list: (1) start prompt fallback, (2) dialog keys (trust, dev-channel, onboarding), (3) `stop` (Esc / Ctrl-C), (4) resume prompt `"Continue the task; read your brief again if needed."` after an app restart or usage pause. Everything that carries *content* goes manager → worker via `SendMessage`. Late permission allows and approval results are announced **by the manager**.
+* **Channel kinds (single enum):** `user_decision`, `new_task`, `worker_spawned`, `spawn_failed`, `worker_done`, `permission_request`, `approval_request`, `worker_event` (idle/stalled/crashed/exited), `system` (usage warn/pause/clear, resume snapshot, redelivery). Meta keys: `id`, `kind`, `task`, `worker` (name), `worker_id`, `ts`.
+* **Ack:** every manager tool accepts optional `ack: string[]` (event ids); `ack_event` remains. `user_decision` is acked by `ack_attention`. Redelivery timer starts at the manager's next `Stop` after the push (not wall clock), 10 min, ≤3.
+* **Question ids:** workers number their own questions per worker (`login-tests#Q3`); the app does not track them.
+* **Fallback B** tools `ask_manager{question}` and `report_to_manager{text}` exist in the worker tool table but are *hidden unless* the capability probe disables native messaging; they push `worker_event` channel events.
+* **v0.1 builds channel + paste** (paste is the only option if channel fails on the user's Mac); both share one Delivery Engine with a `transport` interface.
+* Manager must check that a native message's **sender name** is a live worker (`list_workers`) before treating it as a worker message (M9).
+
+### 18.3 Spawning (M21, m3, m4, C11, C6)
+* PATH is resolved once at boot: `$SHELL -l -i -c 'printf %s "$PATH"; echo; command -v claude'`. Sessions are spawned **directly** (`pty.spawn(claudePath, args, …)`), not through the shell.
+* **Env allowlist:** `HOME USER LOGNAME SHELL LANG LC_ALL TMPDIR PATH SSH_AUTH_SOCK HTTPS_PROXY HTTP_PROXY https_proxy http_proxy NODE_EXTRA_CA_CERTS` + the agentboard vars + `TERM=xterm-256color TERM_PROGRAM=agentboard CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 NO_PROXY/no_proxy=127.0.0.1,localhost MCP_TOOL_TIMEOUT=120000`. Everything else (notably `CLAUDE*`, `ITERM*`, `KITTY*`, `GHOSTTY*`, `TERM_SESSION_ID`) is absent.
+* Session files are regenerated on **every** spawn/resume (port and token change); paths come from `process.resourcesPath` (packaged) or the repo `resources/` dir (dev).
+* `spawn_worker` is **asynchronous**: returns `{worker_id, name, status:"spawning"}`; completion arrives as `worker_spawned` / `spawn_failed` channel events.
+* Boot kills orphaned recorded pids whose command line still contains `claude` and the session id before resuming.
+* Tokens are kept **in memory and process env only**; session files reference `${AGENTBOARD_TOKEN}` (✅ M0-2). No token is written to disk; the CLI shim and its user token are cut from v0.1 (S4).
+
+### 18.4 Permission floor (C3, C4, M6–M8, m14)
+* A **`PreToolUse` command hook on every tool** (`matcher: "*"`) is the floor: it runs before allow rules, so allow-prefixes cannot bypass it. The bus evaluates: hard-irreversible match (Bash command parsed with `shell-quote`, paths resolved against cwd, unresolvable → irreversible; MCP tool names from extra servers matched against `send|delete|trash|publish|deploy|pay|transfer|post`; core tools excluded) → `deny` unless a matching grant exists → `allow`/no decision. `SendMessage` target check (hub-and-spoke) lives in the same hook.
+* `PermissionRequest` only handles the "manager decides" path; hold reduced to 30 s; on timeout deny with "Ask @manager with SendMessage and continue other work."
+* **Deny-listed actions** (`git push`, `git merge`, `sudo`, `rm -rf`) are never run by workers even with approval: the **app** runs them via `execute_approved`. Grants apply only to non-denied tools (e.g. an MCP `send_email`).
+* `execute_approved` accepts `{attention_id}` **or** `{task_id, preauth_index}`; it is idempotent (`attention.executed` / `preauth.executed` events; second call → `ALREADY_EXECUTED`).
+* Task field `auto_allow: string[]` (permission-rule grammar, validated against the floor), settable by `update_task`.
+* Default worker allow list drops `Bash(npm run *)` and `Bash(git branch *)`; adds `SendMessage`. Worker deny adds `Bash(claude *)`, `Bash(git stash *)`, `Bash(git branch -D *)`, and `Read/Edit` of `~/agentboard/**` except the worker's own task dir and worktree/workspace.
+* Notifier shims: `~/agentboard/bin/shims/{osascript,terminal-notifier,say,afplay}` first in workers' PATH (log + exit 1). Watchdog stays as defence in depth. Goal 5 is restated as "no supported path; residual risk covered by shims, watchdog, and the leak test".
+
+### 18.5 Approval flow (C2, M16)
+`request_approval` → `approval.requested{id:"R<n>"}` → `approval_request` channel event. Manager: reversible → `decide_approval{ticket, decision, message?}` (creates grant for non-denied tools); irreversible → `escalate(kind:"approval", ticket)`; `options[].action?` links options to `execute_approved` actions. On `attention.answered` the app creates the grant (or the manager runs `execute_approved`); the manager tells the worker with `SendMessage`. New events: `approval.requested`, `approval.decided`.
+
+### 18.6 Tasks and sessions (M4, M13, M14, M15, M18, M19, m9)
+* `new_task` events: the manager calls `update_task` (not `create_task`).
+* Transitions (actor): `inbox→planned` manager; `planned→queued` app on `spawn_worker` when paused or `depends_on` unmet (`depends_on` gates spawn: `TASK_NOT_ASSIGNABLE{waiting_on}`); `queued|planned→running` app on `worker_spawned`; `running→blocked` app when an open attention item lists the task in `blocks.tasks` or usage pause; `blocked→running` app when cleared; `running→review` app on `done(success)` with commits on branch; `running→done` app on `done(success)` without branch; `running→failed` app on `done(failed)` or 2nd crash; `review→done` app after `execute_approved git.merge`; `review→running` manager (rework via `update_task`); any→`cancelled` user (board) or manager; crash → task stays `running` while resuming.
+* After `done`, the app keeps the PTY until the manager calls `stop_worker` (or 30 min). Worktree cleanup: automatic after merge, after cancel (if clean), never with uncommitted changes; no approval needed. A name is reusable after `session.cleaned_up`.
+* **Merge** (`git.merge`) happens in a temporary detached worktree on base; then the base ref is fast-forwarded with `git update-ref` (compare-and-swap old value). Refuse if base is checked out *and dirty* in another worktree; if checked out and clean, `git -C <that worktree> merge --ff-only <tmp-commit>`.
+* Events added: `report.created`, `attention.executed`, `preauth.executed`, `approval.requested`, `approval.decided`, `worker.spawned`, `worker.spawn_failed`, `event.pushed`, `event.acked`, `event.redelivered`. `message.sent/delivered/deferred/delivery_failed` are removed.
+* Cancel (board): app stops the worker, withdraws its attention items (`task_cancelled`), pushes `system` to the manager.
+* `notify_on_completion` is removed from v0.1; completions never alert.
+
+### 18.7 Attention details (C7, C8, C10, m5–m8, m15)
+* `later …` in a batch → `attention.snoozed`, never `answered`.
+* Chat answers: actor `user`, `via:"chat_quote"`; quote verification uses the **submitted line** captured by the renderer (text in the input region when the user presses Enter in the Manager tab, excluding injected text), normalised (collapse whitespace, case-insensitive); user pastes count as typed.
+* Ladder: `step` index and `anchor` (time of last alert of any kind). Next reminder = `anchor + ladder[step]`; urgent arrival in a normal ladder → `min(next, now+5 min)`. Reminder text includes snoozed count. `alert.failed` retries at 30 s, 2 m, 5 m, then follows the ladder.
+* Counts: Dock badge = open (excl. snoozed); tray = `open · snoozed later`. Urgent snooze > 4 h is clamped to 4 h.
+* `DUPLICATE_OPEN_ITEM` key = `(task, kind, normalised question)`. App-origin items ("manager did not ack", "dialog needs you", "disk full") have options `retry|dismiss`.
+* **Disk full:** refuse new commands with `DISK_FULL`, no in-memory-only acknowledgements; red banner; one app-origin OS alert through `NotificationService` with origin `app` (the leak test allows origins `attention` and `app` only).
+* Dialog auto-answers that don't match within 10 s → `needs_user_dialog` + app-origin attention item.
+
+### 18.8 Engineering (M20, M22, M23, m2, m16)
+* Event store: `fs.promises` with `FileHandle.write` + `datasync` group commit; **all** effects await the commit (no sync I/O on the main thread). A utility process is v0.2 if profiling demands it.
+* Body limits: MCP/hooks 256 KB; statusline 64 KB.
+* Stalled detection ignores periods with an in-flight tool call (PreToolUse seen, PostToolUse pending) and workers in `waiting_on_manager` (set when a worker's `SendMessage` to `@manager` is observed, cleared on its next `UserPromptSubmit`); idle-without-done threshold 30 min.
+
+### 18.9 Scope cuts for v0.1 (S2–S8)
+Cut to v0.2: inbox folder, CLI shim, state snapshots, segment rotation, usage sparkline/cache/effort/Copy JSON (chip + drawer with ctx, tokens, cost, time, lines, plan windows remain), `answer_worker_prompt` (replaced by "dialog needs you" attention item), disk-full emergency mode beyond 18.7. `write_skill` stays (user requirement) without catalog `fs.watch` (rescan on each `list_skills`). LaunchAgent KeepAlive stays (user requirement: relaunch on crash).
+
+### 18.10 Re-classified verification tags (m12, m13)
+`Notification.getHistory()`, `--permission-mode manual`, `PushNotification` tool name, `prompt_cache` version, PreToolUse deny honoured for `SendMessage` → **[U]**.
