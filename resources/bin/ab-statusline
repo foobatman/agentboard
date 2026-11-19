@@ -1,0 +1,9 @@
+#!/bin/sh
+# agentboard statusLine: forwards Claude Code's statusLine JSON to the bus (usage panel),
+# then prints a compact line. Must exit fast: the statusLine timeout is undocumented.
+INPUT=$(cat)
+printf '%s' "$INPUT" | curl -s --noproxy '*' --max-time 2 -H "Authorization: Bearer $AGENTBOARD_TOKEN" \
+  -H 'Content-Type: application/json' --data-binary @- "$AGENTBOARD_BUS_URL/statusline" >/dev/null 2>&1 &
+CTX=$(printf '%s' "$INPUT" | sed -n 's/.*"used_percentage":[ ]*\([0-9.]*\).*/\1/p' | head -n1 | cut -d. -f1)
+printf 'agentboard · %s%s\n' "${AGENTBOARD_NAME:-session}" "${CTX:+ · ctx ${CTX}%}"
+exit 0

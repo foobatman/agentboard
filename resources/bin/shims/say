@@ -1,0 +1,7 @@
+#!/bin/sh
+# agentboard shim: workers must never notify the user (SPEC §8, §18.4).
+NAME=$(basename "$0")
+curl -s --noproxy '*' --max-time 2 -H "Authorization: Bearer $AGENTBOARD_TOKEN" -H 'Content-Type: application/json' \
+  --data "{\"kind\":\"shim\",\"detail\":\"$NAME invoked\"}" "$AGENTBOARD_BUS_URL/leak" >/dev/null 2>&1
+echo "$NAME is disabled inside agentboard workers. Report to @manager instead." >&2
+exit 1

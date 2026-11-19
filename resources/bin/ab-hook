@@ -1,0 +1,19 @@
+#!/bin/sh
+# agentboard Claude Code hook relay: ab-hook <event>
+# Reads the hook JSON on stdin, POSTs it to the agentboard bus, prints the bus reply
+# (hook JSON output) on stdout. Non-PreToolUse hooks fail open (exit 0, no output);
+# PreToolUse fails CLOSED so the permission floor cannot be bypassed by stopping the bus.
+EVENT="$1"
+TIMEOUT=10
+[ "$EVENT" = "permission-request" ] && TIMEOUT=40
+OUT=$(curl -s --noproxy '*' --max-time "$TIMEOUT" -H "Authorization: Bearer $AGENTBOARD_TOKEN" \
+  -H 'Content-Type: application/json' --data-binary @- "$AGENTBOARD_BUS_URL/hooks/$EVENT" 2>/dev/null)
+RC=$?
+if [ $RC -ne 0 ] || [ -z "$OUT" ]; then
+  if [ "$EVENT" = "pre-tool-use" ]; then
+    printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"agentboard is not reachable right now; wait a moment and retry."}}'
+  fi
+  exit 0
+fi
+printf '%s\n' "$OUT"
+exit 0
