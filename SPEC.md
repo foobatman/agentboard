@@ -1204,3 +1204,25 @@ Cut to v0.2: inbox folder, CLI shim, state snapshots, segment rotation, usage sp
 
 ### 18.10 Re-classified verification tags (m12, m13)
 `Notification.getHistory()`, `--permission-mode manual`, `PushNotification` tool name, `prompt_cache` version, PreToolUse deny honoured for `SendMessage` → **[U]**.
+
+---
+
+## 19. Implementation status (v0.1 build, 2026-11-19)
+
+The MVP is implemented in this repository (`src/`, `resources/`, `test/`). Build-time findings that amend the spec:
+
+| Area | As built | Notes / deviation |
+|---|---|---|
+| Native module | `node-pty` 1.1.0 is N-API: the Node build loads in Electron 45 unchanged | **No `electron-rebuild`** (it also needs `artifacts.electronjs.org`); `postinstall` only fixes `spawn-helper` permissions |
+| Hooks | all `command` hooks via `resources/bin/ab-hook` (curl → bus); PreToolUse fails **closed** if the bus is unreachable | §18.1 |
+| MCP | `@modelcontextprotocol/sdk` 1.32.2, streamable HTTP, per-session token in `Authorization: Bearer ${AGENTBOARD_TOKEN}`; answers the 2026-07-28 `server/discover` probe with method-not-found so clients fall back to `initialize` | verified with the SDK client and the real CLI |
+| Channel | `?channel=1` on the manager's MCP URL declares `experimental['claude/channel']`; pushes `notifications/claude/channel` on the standalone SSE stream | registration verified with real CLI 2.1.328; model-side rendering needs a real turn |
+| Quick-add | global hotkey shows the main window with a quick-add modal (not a separate floating window) | simpler; same fields |
+| Crash relaunch | LaunchAgent written only for packaged builds (`KeepAlive.SuccessfulExit=false`); takes effect from the next login | `setLoginItemSettings` not used (avoid double launch) |
+| Stuck screens | trust / dev-channel dialogs auto-answered; onboarding, login, unknown dialogs → `needs_user_dialog` + app attention item | replaces `answer_worker_prompt` (§18.9) |
+| Lint rule | static test `test/unit/static.test.ts` instead of ESLint | same guarantee |
+| Not built (stretch/deferred) | notification inline reply, Open in Warp, Focus/DND detection, CLI shim, inbox folder, snapshots | §1.3, §18.9 |
+
+**Test evidence:** `npm test` — 35 tests (event store incl. torn tail; reducer; scheduler with fake clock: coalescing, urgent window, ladder, snooze, boot re-alert, alert retry; permission floor; batch parser; naming; output filter; bus/MCP/auth/channel; git merge/conflict/dirty; full end-to-end flow with `scripts/fake-claude.mjs` incl. leak stimuli and exactly one alert). `npm run test:real` — real CLI startup checks (no prompt sent).
+
+**Still open (need macOS or real model turns):** M0-3, M0-5, M0-6, M0-8, M0-9, M0-11–M0-16, M0-18 from §16/§18.1; macOS notification permission & signing; LaunchAgent behaviour.

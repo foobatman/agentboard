@@ -26,6 +26,10 @@ describe('batch parser', () => {
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/A99/);
   });
+  it('matches the first word of a label ignoring punctuation', () => {
+    const it13 = item('A13', { options: [{ key: 'a', label: 'Yes' }, { key: 'b', label: 'No, self-serve only' }] });
+    expect(parseBatch('13 no', { A13: it13 }).answers[0]).toEqual({ id: 'A13', type: 'option', optionKey: 'b' });
+  });
   it('rejects unknown answers', () => {
     expect(parseBatch('12 maybe', items).ok).toBe(false);
     expect(parseBatch('12 rec', items).answers[0]).toEqual({ id: 'A12', type: 'option', optionKey: 'a' });

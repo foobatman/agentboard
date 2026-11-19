@@ -11,6 +11,14 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { z } from 'zod';
 
 const argv = process.argv.slice(2);
+if (argv[0] === '--version') {
+  console.log('2.1.328 (Claude Code)');
+  process.exit(0);
+}
+if (argv[0] === '--help') {
+  console.log('Usage: claude --session-id --resume --name --model --permission-mode --settings --setting-sources --mcp-config --strict-mcp-config --add-dir');
+  process.exit(0);
+}
 const opt = (name) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;

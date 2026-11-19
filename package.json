@@ -13,11 +13,11 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "node scripts/chmod-spawn-helper.mjs",
-    "dist:mac": "npm run build && electron-builder --mac"
+    "dist:mac": "npm run build && electron-builder --mac",
+    "test:real": "AB_REAL_CLAUDE=1 vitest run test/integration/real-claude.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

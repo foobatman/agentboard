@@ -238,7 +238,10 @@ export class Orchestrator extends EventEmitter implements BusHandlers {
     fs.mkdirSync(sess.cwd, { recursive: true });
     const pty = this.d.ptys.spawn({ session: sess.id, file: this.d.claudePath, args, cwd: sess.cwd, env });
     await this.hub.commit(draft('session.started', APP, { session: sess.id, pid: pty.pid }));
-    pty.on('ready', () => void this.setState(sess.id, 'ready', 'screen'));
+    pty.on('ready', () => {
+      const cur = this.hub.state.sessions[sess.id]?.state;
+      if (cur === 'spawning' || cur === 'needs_user_dialog') void this.setState(sess.id, 'ready', 'screen');
+    });
     pty.on('dialog', (dl: { id: string; needsUser: boolean }) => void this.onDialog(sess.id, dl));
     pty.on('data', (data: string) => this.onPtyData(sess.id, data));
     pty.on('exit', (e: { exitCode: number; signal?: number }) => void this.onExit(sess.id, e));

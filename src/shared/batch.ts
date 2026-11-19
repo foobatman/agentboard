@@ -87,7 +87,7 @@ export function parseBatch(input: string, items: Record<string, AttentionItem>, 
     }
     const byKey = item.options.find((o) => o.key.toLowerCase() === rest.toLowerCase());
     const byLabel =
-      byKey ?? item.options.find((o) => o.label.toLowerCase() === rest.toLowerCase() || o.label.toLowerCase().split(/\s+/)[0] === w);
+      byKey ?? item.options.find((o) => o.label.toLowerCase() === rest.toLowerCase() || o.label.toLowerCase().split(/[\s,.;:!?()]+/)[0] === w);
     if (byLabel) {
       answers.push({ id, type: 'option', optionKey: byLabel.key });
       continue;
