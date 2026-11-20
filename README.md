@@ -17,11 +17,15 @@ Design: [`SPEC.md`](SPEC.md) (§18 records the review and the verified spike res
 ## Run
 ```bash
 npm install          # node-pty is N-API: no Electron rebuild needed
-npm run dev          # electron-vite dev mode
+npm run dev          # electron-vite dev mode (adds --noSandbox automatically when run as root on Linux)
 npm test             # unit + integration tests (uses scripts/fake-claude.mjs, no Claude usage)
 npm run test:real    # opt-in: launches the real claude CLI without sending a prompt
 npm run dist:mac     # signed DMG/zip (needs a Developer ID for notifications + login items)
 ```
+Only one agentboard may use a home folder at a time: if `npm run dev` exits right away with
+"… is in use by another agentboard", quit the running one (tray → Quit) or set `AGENTBOARD_HOME`.
+On a headless Linux box use `xvfb-run -a npm run dev`.
+
 On first launch agentboard creates `~/agentboard/` (override with `AGENTBOARD_HOME`). All worktrees and
 workspaces live under it, so trusting it once covers every worker (Claude Code inherits folder trust).
 

@@ -10,6 +10,7 @@ import { AttentionScheduler } from './attention/scheduler';
 import { Orchestrator } from './app/orchestrator';
 import { ElectronNotifier } from './app/electron-notifier';
 import { installLaunchAgent, resolveClaude, versionOk } from './app/environment';
+import { acquireHomeLock } from './app/home-lock';
 import { NotificationService } from './notify/notification-service';
 import { PtyManager } from './pty/pty-manager';
 import { abPaths, shq } from './pty/session-files';
@@ -27,7 +28,9 @@ function findResources(): string {
 const RESOURCES = findResources();
 
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  // Another agentboard owns ~/agentboard (sessions, event log). Say so instead of exiting silently.
+  console.error('[agentboard] another agentboard instance is already running; focusing it and exiting. Quit it first (tray → Quit) to start a dev build.');
+  app.exit(0);
 }
 
 let win: BrowserWindow | undefined;
@@ -173,6 +176,13 @@ async function main(): Promise<void> {
   // renderer may never request notification permission or raise web notifications (SPEC §8 #10)
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'clipboard-sanitized-write'));
   fs.mkdirSync(HOME, { recursive: true, mode: 0o700 });
+  const lock = acquireHomeLock(HOME);
+  if (!lock.ok) {
+    console.error(`[agentboard] ${HOME} is in use by another agentboard (pid ${lock.pid}). Quit it first (tray → Quit), or set AGENTBOARD_HOME to a different folder.`);
+    app.exit(0);
+    return;
+  }
+  app.on('will-quit', () => lock.release());
   const paths = abPaths(HOME);
   if (!fs.existsSync(paths.repos)) fs.writeFileSync(paths.repos, JSON.stringify({ repos: {} }, null, 2));
   if (!fs.existsSync(paths.mcpCatalog)) fs.writeFileSync(paths.mcpCatalog, JSON.stringify({}, null, 2));
