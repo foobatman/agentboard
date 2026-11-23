@@ -12,9 +12,21 @@ interface Store {
   openTabs: string[];
   quickAdd: boolean;
   usageDrawer?: string;
+  /** Sidebar: hide workers whose task is finished (persisted per machine). */
+  hideFinishedWorkers: boolean;
   setView(v: View): void;
+  setHideFinishedWorkers(v: boolean): void;
   setQuickAdd(v: boolean): void;
   setUsageDrawer(s?: string): void;
+}
+
+const HIDE_FINISHED_KEY = 'agentboard.hideFinishedWorkers';
+function loadFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -23,6 +35,15 @@ export const useStore = create<Store>((set, get) => ({
   view: { kind: 'needs' },
   openTabs: [],
   quickAdd: false,
+  hideFinishedWorkers: loadFlag(HIDE_FINISHED_KEY),
+  setHideFinishedWorkers: (v) => {
+    try {
+      localStorage.setItem(HIDE_FINISHED_KEY, v ? '1' : '0');
+    } catch {
+      /* storage unavailable: keep the choice for this run only */
+    }
+    set({ hideFinishedWorkers: v });
+  },
   setView: (v) => {
     if (v.kind === 'session' && !get().openTabs.includes(v.id)) set({ openTabs: [...get().openTabs, v.id] });
     set({ view: v });

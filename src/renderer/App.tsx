@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { LIVE_SESSION_STATES, type Session } from '../shared/types';
+import { LIVE_SESSION_STATES, type Session, type TaskStatus } from '../shared/types';
 import { initStore, useStore } from './store';
 import { TerminalView } from './components/Terminal';
 import { Bar, UsageChip, UsageDrawer, useUsage } from './components/Usage';
@@ -11,16 +11,22 @@ function SessionRow({ s }: { s: Session }) {
   const view = useStore((x) => x.view);
   const setView = useStore((x) => x.setView);
   const u = useUsage(s.id);
+  const taskTitle = useStore((x) => (s.taskId ? x.state.tasks[s.taskId]?.title : undefined));
   const active = view.kind === 'session' && view.id === s.id;
   return (
     <div className={`nav-item ${active ? 'active' : ''}`} onClick={() => setView({ kind: 'session', id: s.id })} title={`${s.name} · ${s.state}${s.taskId ? ` · ${s.taskId}` : ''}`}>
       <span className={`dot ${s.state}`} />
-      <span className="name">{s.role === 'manager' ? 'Manager' : s.name}</span>
-      {s.taskId && <span className="muted small">{s.taskId}</span>}
+      <span className="text">
+        <span className="name">{s.role === 'manager' ? 'Manager' : s.name}</span>
+        <span className="sub">{[taskTitle ? `${s.taskId} · ${taskTitle}` : s.taskId, s.state.replace(/_/g, ' ')].filter(Boolean).join(' · ')}</span>
+      </span>
       <Bar pct={u?.ctxUsedPct} />
     </div>
   );
 }
+
+/** Task states where the worker's job is over (failed stays visible: it usually needs you). */
+const FINISHED_TASK_STATUSES: TaskStatus[] = ['review', 'done', 'cancelled'];
 
 function Sidebar() {
   const st = useStore((x) => x.state);
@@ -32,6 +38,15 @@ function Sidebar() {
   const workers = Object.values(st.sessions)
     .filter((s) => s.role === 'worker' && !s.cleanedUp && (LIVE_SESSION_STATES.includes(s.state) || ['crashed', 'interrupted', 'exited'].includes(s.state)))
     .sort((a, b) => (a.taskId ?? '').localeCompare(b.taskId ?? '', undefined, { numeric: true }));
+  const hideFinished = useStore((x) => x.hideFinishedWorkers);
+  const setHideFinished = useStore((x) => x.setHideFinishedWorkers);
+  const isFinished = (s: Session) => {
+    const status = s.taskId ? st.tasks[s.taskId]?.status : undefined;
+    return !!status && FINISHED_TASK_STATUSES.includes(status);
+  };
+  const finishedCount = workers.filter(isFinished).length;
+  // Keep the worker you are looking at in the list even when it is finished.
+  const shownWorkers = hideFinished ? workers.filter((w) => !isFinished(w) || (view.kind === 'session' && view.id === w.id)) : workers;
   const p = st.usage.plan;
   return (
     <aside className="sidebar">
@@ -50,9 +65,21 @@ function Sidebar() {
         <span className="icon">✎</span>
         <span className="name">Reports</span>
       </div>
-      <div className="section">WORKERS</div>
+      <div className="section section-row">
+        <span>WORKERS</span>
+        {finishedCount > 0 && (
+          <button
+            className="link small"
+            onClick={() => setHideFinished(!hideFinished)}
+            title={hideFinished ? 'Show workers whose task is in review, done or cancelled' : 'Hide workers whose task is in review, done or cancelled'}
+          >
+            {hideFinished ? `Show finished (${finishedCount})` : 'Hide finished'}
+          </button>
+        )}
+      </div>
       {workers.length === 0 && <div className="muted small pad">No workers yet</div>}
-      {workers.map((w) => (
+      {workers.length > 0 && shownWorkers.length === 0 && <div className="muted small pad">All workers finished</div>}
+      {shownWorkers.map((w) => (
         <SessionRow key={w.id} s={w} />
       ))}
       <div className="spacer" />

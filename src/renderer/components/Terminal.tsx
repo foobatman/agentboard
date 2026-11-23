@@ -20,7 +20,7 @@ export function TerminalView({ session, visible }: { session: string; visible: b
       scrollback: 10000,
       macOptionIsMeta: true,
       allowProposedApi: true,
-      theme: { background: '#0d0f12', foreground: '#d8dee9', cursor: '#d8dee9', selectionBackground: '#3b4252' },
+      theme: { background: '#0b0b0c', foreground: '#e8e8e8', cursor: '#e8e8e8', cursorAccent: '#0b0b0c', selectionBackground: '#33415c' },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

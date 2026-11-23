@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, session as electronSession, shell, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session as electronSession, shell, Tray } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -42,14 +42,19 @@ let quitting = false;
 let psb: number | undefined;
 
 function createWindow(): BrowserWindow {
+  // Open spanning the whole usable screen (menu bar and Dock excluded) of the display the cursor is on.
+  // A normal window sized to the work area, not macOS native full screen (the green button).
+  const { x, y, width, height } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const w = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    x,
+    y,
+    width,
+    height,
     minWidth: 1100,
     minHeight: 700,
     title: 'agentboard',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    backgroundColor: '#111317',
+    backgroundColor: '#0b0b0c',
     show: !process.argv.includes('--background'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
