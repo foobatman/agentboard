@@ -180,7 +180,8 @@ export class Bus {
       const event = url.pathname.split('/')[2] ?? '';
       const out = await this.handlers.onHook(id, event, (body ?? {}) as Record<string, unknown>);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(out ? JSON.stringify(out) : '');
+      // Always a JSON body: an empty reply is indistinguishable from "bus unreachable" to ab-hook.
+      res.end(JSON.stringify(out ?? {}));
       return;
     }
     if (route === 'statusline' && req.method === 'POST') {

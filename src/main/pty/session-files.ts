@@ -283,6 +283,8 @@ export function claudeArgs(o: {
   a.push('--append-system-prompt-file', o.files.systemAppend);
   for (const d of o.addDirs ?? []) a.push('--add-dir', d);
   if (o.channel) a.push('--dangerously-load-development-channels', 'server:agentboard');
-  if (o.startPrompt) a.push(o.startPrompt);
+  // `--add-dir` and `--dangerously-load-development-channels` are variadic: without `--` the CLI
+  // swallows the prompt as another dir / channel entry (and rejects it as an untagged channel).
+  if (o.startPrompt) a.push('--', o.startPrompt);
   return a;
 }

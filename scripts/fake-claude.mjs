@@ -23,11 +23,26 @@ const opt = (name) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const flagsWithValue = new Set(['--session-id', '--resume', '--name', '--model', '--permission-mode', '--settings', '--setting-sources', '--mcp-config', '--append-system-prompt-file', '--add-dir', '--dangerously-load-development-channels']);
+const flagsWithValue = new Set(['--session-id', '--resume', '--name', '--model', '--permission-mode', '--settings', '--setting-sources', '--mcp-config', '--append-system-prompt-file']);
+// Variadic like the real CLI: they consume every following non-option arg (until `--` or the next flag).
+const variadicFlags = new Set(['--add-dir', '--dangerously-load-development-channels']);
 let positional;
 for (let i = 0; i < argv.length; i++) {
-  if (flagsWithValue.has(argv[i])) i++;
-  else if (!argv[i].startsWith('--')) positional = argv[i];
+  const a = argv[i];
+  if (a === '--') {
+    positional = argv[i + 1];
+    break;
+  }
+  if (flagsWithValue.has(a)) i++;
+  else if (variadicFlags.has(a)) {
+    while (i + 1 < argv.length && !argv[i + 1].startsWith('-')) {
+      const v = argv[++i];
+      if (a === '--dangerously-load-development-channels' && !/^(server|plugin):/.test(v)) {
+        process.stderr.write(`--dangerously-load-development-channels entries must be tagged: ${v}\n`);
+        process.exit(1);
+      }
+    }
+  } else if (!a.startsWith('--')) positional = a;
 }
 const sessionId = opt('--session-id') ?? opt('--resume');
 const name = opt('--name') ?? 'fake';

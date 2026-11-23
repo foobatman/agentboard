@@ -6,7 +6,8 @@
 EVENT="$1"
 TIMEOUT=10
 [ "$EVENT" = "permission-request" ] && TIMEOUT=40
-OUT=$(curl -s --noproxy '*' --max-time "$TIMEOUT" -H "Authorization: Bearer $AGENTBOARD_TOKEN" \
+# -f: an HTTP error (401/5xx) must count as unreachable, never be relayed as hook output.
+OUT=$(curl -sf --noproxy '*' --max-time "$TIMEOUT" -H "Authorization: Bearer $AGENTBOARD_TOKEN" \
   -H 'Content-Type: application/json' --data-binary @- "$AGENTBOARD_BUS_URL/hooks/$EVENT" 2>/dev/null)
 RC=$?
 if [ $RC -ne 0 ] || [ -z "$OUT" ]; then
