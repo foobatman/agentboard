@@ -22,7 +22,7 @@ import { DeliveryEngine } from '../delivery/engine';
 import { evaluateFloor, ruleMatches } from '../policy/floor';
 import { PtyManager, type PtySession } from '../pty/pty-manager';
 import { LIMIT_PATTERNS } from '../pty/dialogs';
-import { abPaths, buildEnv, claudeArgs, managerSettings, mcpConfig, workerSettings, writeSessionFiles } from '../pty/session-files';
+import { abPaths, buildEnv, claudeArgs, managerSettings, mcpConfig, workerSettings, writeChannelDeclaration, writeSessionFiles } from '../pty/session-files';
 import { canTransition } from '../store/reducer';
 import type { StateHub } from '../store/state-hub';
 import { renderBoard } from '../store/board-md';
@@ -201,6 +201,7 @@ export class Orchestrator extends EventEmitter implements BusHandlers {
       mcp: mcpConfig(this.bus.url, extraMcp, channel),
       systemAppend: fs.readFileSync(path.join(this.d.resources, 'prompts', isMgr ? 'manager.md' : 'worker.md'), 'utf8'),
     });
+    if (isMgr) writeChannelDeclaration(sess.cwd, channel ? this.bus.url : null);
     const startPrompt =
       extra.startPrompt ??
       (isMgr

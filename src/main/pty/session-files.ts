@@ -191,6 +191,24 @@ export function mcpConfig(busUrl: string, extra: Record<string, unknown> = {}, c
   };
 }
 
+/**
+ * Claude Code (≥ 2.1.330) resolves `--dangerously-load-development-channels server:<name>` against
+ * project `.mcp.json` declarations and does not count servers passed via `--mcp-config`, so it warns
+ * "no MCP server configured with that name" even though the channel works. Declaring the server in
+ * the manager cwd's `.mcp.json` silences that. `--strict-mcp-config` still governs what is loaded,
+ * so this file never adds a second connection. Holds no secret (token comes from the env).
+ */
+export function writeChannelDeclaration(cwd: string, busUrl: string | null): void {
+  const file = path.join(cwd, '.mcp.json');
+  if (busUrl === null) {
+    fs.rmSync(file, { force: true });
+    return;
+  }
+  const cfg = mcpConfig(busUrl, {}, true);
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
 /** Env allowlist: never inherit process.env wholesale (SPEC §18.3). */
 export const ENV_ALLOW = [
   'HOME',
