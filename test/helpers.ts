@@ -4,6 +4,13 @@ import path from 'node:path';
 import { EventStore } from '../src/main/store/event-store';
 import { StateHub } from '../src/main/store/state-hub';
 import type { Clock } from '../src/main/attention/scheduler';
+import { afterEach } from 'vitest';
+
+// Close every hub's event-log FileHandle after each test (Node >= 25 errors on GC-closed handles).
+const openHubs: StateHub[] = [];
+afterEach(async () => {
+  await Promise.all(openHubs.splice(0).map((h) => h.store.close().catch(() => undefined)));
+});
 
 export function tmpDir(prefix = 'ab-test-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -12,6 +19,7 @@ export function tmpDir(prefix = 'ab-test-'): string {
 export async function newHub(dir = tmpDir(), clock?: { now(): number }): Promise<StateHub> {
   const hub = new StateHub(new EventStore(path.join(dir, 'events.jsonl'), clock ? () => clock.now() : Date.now));
   await hub.boot();
+  openHubs.push(hub);
   return hub;
 }
 

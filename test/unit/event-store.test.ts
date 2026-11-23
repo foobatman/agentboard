@@ -26,6 +26,7 @@ describe('EventStore', () => {
     expect(hub2.state.tasks.T1.status).toBe('planned');
     expect(hub2.state.counters.T).toBe(2);
     expect(hub2.nextId('T')).toBe('T3');
+    await hub2.store.close();
   });
 
   it('concurrent commits are group-committed in order', async () => {
@@ -35,6 +36,7 @@ describe('EventStore', () => {
     await Promise.all(Array.from({ length: 50 }, (_, i) => hub.commit(taskDraft(`T${i + 1}`))));
     const lines = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(lines.map((l) => l.seq)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
+    await hub.store.close();
   });
 
   it('quarantines and truncates a torn final line', async () => {

@@ -119,6 +119,10 @@ describe('end-to-end with fake claude', () => {
     await wp.injectPaste('!tool SendMessage {"to":"pricing-research","message":"hi"}');
     await until(() => readLog(fakeLogs, 'greeting-file').filter((l) => l.kind === 'pretool').length >= 2, 10_000, 'pretool 2');
     expect(readLog(fakeLogs, 'greeting-file').filter((l) => l.kind === 'pretool')[1].res).toMatch(/only message @manager/);
+    // A harmless tool must not be denied (regression: an empty bus reply was read as "unreachable").
+    await wp.injectPaste('!tool Read {"file_path":"README.md"}');
+    await until(() => readLog(fakeLogs, 'greeting-file').filter((l) => l.kind === 'pretool').length >= 3, 10_000, 'pretool 3');
+    expect(readLog(fakeLogs, 'greeting-file').filter((l) => l.kind === 'pretool')[2].res).not.toMatch(/deny/);
     expect(rendererSaw).not.toMatch(/\x07/);
     expect(rendererSaw).not.toMatch(/\x1b\]9;/);
 
