@@ -54,7 +54,7 @@ function createWindow(): BrowserWindow {
     minHeight: 700,
     title: 'agentboard',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    backgroundColor: '#111317',
+    backgroundColor: '#0b0b0c',
     show: !process.argv.includes('--background'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
